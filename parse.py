@@ -5,7 +5,6 @@ import argparse
 import logging
 import sys
 
-
 def valid_conference(s):
     """Convert conference string into a valid format (lowercaseYYYY)"""
     s = s.lower()
@@ -13,7 +12,6 @@ def valid_conference(s):
         return s.lower()
     else:
         raise ValueError('Conference format must be in [a-z]YYYY e.g. cvpr2015')
-
 
 def rank_authors(authors):
     """Simple generator to take a list of authors and return a tuple with their ranks.
@@ -63,9 +61,26 @@ def parse_jmlr(conference):
 def parse_nips(conference):
     year = int(conference[-4:])
     no = year - 1987
-    url = 'https://papers.nips.cc/book/advances-in-neural-information-processing-systems-%d-%d' % (no, year)
+    base_url = 'https://papers.nips.cc'
+    url = base_url + '/book/advances-in-neural-information-processing-systems-%d-%d' % (no, year)
     logging.info("Connecting to URL: %s" % url)
-    raise NotImplementedError("NIPS conference parsing not yet implemented.")
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+    papers = [ x for x in soup.find_all('li') if x.find('',{'class':'author'}) ]
+    logging.info("Found %d papers." % len(papers))
+    for paper in papers:
+        title = paper.find('a').text
+        abstract_url = base_url + paper.find('a')['href']
+        authors = [ x.text for x in paper.find_all('a', {'class':'author'}) ]
+        paper_url = abstract_url + ".pdf"
+        entry = {
+            'title' : title,
+            'abstract_url' : abstract_url,
+            'paper_url' : paper_url
+        }
+        for rank, author in rank_authors(authors):
+            entry['author'] = author
+            entry['rank'] = rank
+            yield entry
 
 
 def parse_cvpapers(conference):
@@ -80,12 +95,16 @@ def parse_cvpapers(conference):
     for dt, dd in zip( dt_list, dd_list ):
         authors = [x.strip() for x in dd.text.replace('\n',' ').replace(' and ',',').split(',') if x.strip()]
         title = dt.text.rsplit('(')[0].replace('\n',' ')
+        paper_url = dt.find('a', text='PDF')
+        if paper_url:
+            paper_url = paper_url['href']
         entry = {
-            'title': title
+            'title': title,
+            'paper_url' : paper_url
         }
-        for a in dt.find_all('a'):
-            if a.string == "PDF":
-                entry['paper_url'] = a['href']
+        # for a in dt.find_all('a'):
+        #     if a.string == "PDF":
+        #         entry['paper_url'] = a['href']
         for rank, author in rank_authors(authors):
             entry['author'] = author
             entry['rank'] = rank
@@ -127,6 +146,8 @@ def parse(conference):
     elif ('cvpr' in conference and conference >= 'cvpr2007') or \
             ('eccv' in conference and conference >= 'eccv2006'):
         return parse_cvpapers(conference)
+    elif 'nips' in conference:
+        return parse_nips(conference)
     else:
         raise ValueError("No parser available for conference: %s" % conference)
 

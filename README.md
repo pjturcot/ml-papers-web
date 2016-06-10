@@ -13,7 +13,8 @@ Currently this script only supports outputting to CSV.
     
 ### Supported conferences
 
- - CVPR (2013+ from CV foundation, 2007-2012 from cvpapers.com)
- - ICCV (2013+ from CV foundation)
- - ICML (2013+ from JMLR)
+ - CVPR (2013+ from cv-foundation.org, 2007-2012 from cvpapers.com)
+ - ICCV (2013+ from cv-foundation.org)
+ - ICML (2013+ from jmlr.csail.mit.edu)
  - ECCV (2006+ from cvpapers.com)
+ - NIPS (1988+ from papers.nips.cc)
