@@ -42,8 +42,7 @@ def parse_jmlr(conference):
     papers = soup.find_all('div', {'class': 'paper'})
     logging.info("Found %d papers." % len(papers))
     for paper in papers:
-        title_tag = paper.find('', {'class': 'title'})
-        title = ''.join([x.string for x in title_tag.children])  # Math terms are used as spans
+        title = paper.find('', {'class': 'title'}).text
         authors = [x.strip() for x in paper.find('', {'class': 'authors'}).string.split(',')]
         if title is None:
             break
@@ -70,8 +69,27 @@ def parse_nips(conference):
 
 
 def parse_cvpapers(conference):
-    raise NotImplementedError("CVPapers parsing not yet implemented.")
-
+    base_url = 'http://www.cvpapers.com/'
+    url = base_url + conference.lower() + ".html"
+    logging.info("Connecting to URL: %s" % url)
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+    dt_list = soup.find_all('dt') # Title and paper url
+    dd_list = soup.find_all('dd') # Author
+    assert len(dt_list) == len(dd_list)
+    logging.info("Found %d papers." % len(dt_list))
+    for dt, dd in zip( dt_list, dd_list ):
+        authors = [x.strip() for x in dd.text.replace('\n',' ').replace(' and ',',').split(',') if x.strip()]
+        title = dt.text.rsplit('(')[0].replace('\n',' ')
+        entry = {
+            'title': title
+        }
+        for a in dt.find_all('a'):
+            if a.string == "PDF":
+                entry['paper_url'] = a['href']
+        for rank, author in rank_authors(authors):
+            entry['author'] = author
+            entry['rank'] = rank
+            yield entry
 
 def parse_cvfoundation(conference):
     """
@@ -106,9 +124,11 @@ def parse(conference):
         return parse_jmlr(conference)
     elif ('cvpr' in conference and conference >= 'cvpr2013') or ('iccv' in conference and conference >= 'iccv2013'):
         return parse_cvfoundation(conference)
+    elif ('cvpr' in conference and conference >= 'cvpr2007') or \
+            ('eccv' in conference and conference >= 'eccv2006'):
+        return parse_cvpapers(conference)
     else:
         raise ValueError("No parser available for conference: %s" % conference)
-
 
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
