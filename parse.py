@@ -54,7 +54,7 @@ def parse_cvfoundation(conference):
             'authors': authors
         }
         yield entry
-        
+
 
 def parse_cvpapers(conference):
     base_url = 'http://www.cvpapers.com/'
@@ -77,6 +77,32 @@ def parse_cvpapers(conference):
             'authors': authors
         }
         yield entry
+
+
+def parse_icml2016(conference):
+    assert conference == 'icml2016'
+    url = 'http://icml.cc/2016/?page_id=1649'
+    logging.info("Connecting to URL: %s" % url)
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+
+    papers = soup.find('div',{'id':'schedule'}).find_all('li')
+    for paper in papers:
+        title = paper.find('span', {'class':'titlepaper'}).text
+        authors = []
+        institutions = []
+        for x in paper.find('span', {'class':'authors'} ).children:
+            if x.name == 'i':
+                institutions.append( x.text.strip() )
+            else:
+                authors.append( x.replace(',','').strip() )
+        assert len(authors) == len(institutions)
+        entry = {
+            'title' : title,
+            'authors' : authors,
+            'institutions' : institutions
+        }
+        yield entry
+
 
 
 def parse_jmlr(conference):
@@ -133,7 +159,10 @@ def parse_nips(conference):
 
 def parse(conference):
     if 'icml' in conference:
-        return parse_jmlr(conference)
+        if conference == 'icml2016':
+            return parse_icml2016(conference)
+        else:
+            return parse_jmlr(conference)
     elif ('cvpr' in conference and conference >= 'cvpr2013') or ('iccv' in conference and conference >= 'iccv2013'):
         return parse_cvfoundation(conference)
     elif ('cvpr' in conference and conference >= 'cvpr2007') or \
@@ -156,13 +185,16 @@ if __name__ == "__main__":
     if args.output is None:
         args.output = args.conference + '.csv'
 
+    output_fields = ["author", "rank", "title", "abstract_url", "paper_url", "institution"]
     with open(args.output, 'w') as fout:
-        csv_writer = unicodecsv.DictWriter(fout, ["author", "rank", "title", "abstract_url", "paper_url"], encoding='utf-8')
+        csv_writer = unicodecsv.DictWriter(fout, output_fields, encoding='utf-8')
         csv_writer.writeheader()
         for entry in parse(args.conference):
             authors = entry.pop('authors')
-            for rank, author in rank_authors(authors):
+            institutions = entry.pop('institutions', [None]*len(authors))
+            for rank, (author, institution) in rank_authors( zip(authors, institutions)):
                 entry['rank'] = rank
                 entry['author'] = author
+                entry['institution'] = institution
                 csv_writer.writerow(entry)
     logging.info("Output written to: %s" % args.output)
