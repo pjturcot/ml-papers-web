@@ -5,6 +5,7 @@ import argparse
 import logging
 import sys
 
+
 def valid_conference(s):
     """Convert conference string into a valid format (lowercaseYYYY)"""
     s = s.lower()
@@ -12,6 +13,7 @@ def valid_conference(s):
         return s.lower()
     else:
         raise ValueError('Conference format must be in [a-z]YYYY e.g. cvpr2015')
+
 
 def rank_authors(authors):
     """Simple generator to take a list of authors and return a tuple with their ranks.
@@ -27,88 +29,6 @@ def rank_authors(authors):
             rank = 2
         yield rank, author
 
-
-def parse_jmlr(conference):
-    url_lookup = {
-        'icml2013': 'http://jmlr.csail.mit.edu/proceedings/papers/v28/',
-        'icml2014': 'http://jmlr.csail.mit.edu/proceedings/papers/v32/',
-        'icml2015': 'http://jmlr.csail.mit.edu/proceedings/papers/v37/',
-    }
-    url = url_lookup[conference]
-    logging.info("Connecting to URL: %s" % url)
-    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
-    papers = soup.find_all('div', {'class': 'paper'})
-    logging.info("Found %d papers." % len(papers))
-    for paper in papers:
-        title = paper.find('', {'class': 'title'}).text
-        authors = [x.strip() for x in paper.find('', {'class': 'authors'}).string.split(',')]
-        if title is None:
-            break
-        entry = {
-            'title': title
-        }
-        for a in paper.find_all('a'):
-            if a.string == 'abs':
-                entry['abstract_url'] = url + a['href']
-            elif a.string == 'pdf':
-                entry['paper_url'] = url + a['href']
-        for rank, author in rank_authors(authors):
-            entry['author'] = author
-            entry['rank'] = rank
-            yield entry
-
-
-def parse_nips(conference):
-    year = int(conference[-4:])
-    no = year - 1987
-    base_url = 'https://papers.nips.cc'
-    url = base_url + '/book/advances-in-neural-information-processing-systems-%d-%d' % (no, year)
-    logging.info("Connecting to URL: %s" % url)
-    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
-    papers = [ x for x in soup.find_all('li') if x.find('',{'class':'author'}) ]
-    logging.info("Found %d papers." % len(papers))
-    for paper in papers:
-        title = paper.find('a').text
-        abstract_url = base_url + paper.find('a')['href']
-        authors = [ x.text for x in paper.find_all('a', {'class':'author'}) ]
-        paper_url = abstract_url + ".pdf"
-        entry = {
-            'title' : title,
-            'abstract_url' : abstract_url,
-            'paper_url' : paper_url
-        }
-        for rank, author in rank_authors(authors):
-            entry['author'] = author
-            entry['rank'] = rank
-            yield entry
-
-
-def parse_cvpapers(conference):
-    base_url = 'http://www.cvpapers.com/'
-    url = base_url + conference.lower() + ".html"
-    logging.info("Connecting to URL: %s" % url)
-    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
-    dt_list = soup.find_all('dt') # Title and paper url
-    dd_list = soup.find_all('dd') # Author
-    assert len(dt_list) == len(dd_list)
-    logging.info("Found %d papers." % len(dt_list))
-    for dt, dd in zip( dt_list, dd_list ):
-        authors = [x.strip() for x in dd.text.replace('\n',' ').replace(' and ',',').split(',') if x.strip()]
-        title = dt.text.rsplit('(')[0].replace('\n',' ')
-        paper_url = dt.find('a', text='PDF')
-        if paper_url:
-            paper_url = paper_url['href']
-        entry = {
-            'title': title,
-            'paper_url' : paper_url
-        }
-        # for a in dt.find_all('a'):
-        #     if a.string == "PDF":
-        #         entry['paper_url'] = a['href']
-        for rank, author in rank_authors(authors):
-            entry['author'] = author
-            entry['rank'] = rank
-            yield entry
 
 def parse_cvfoundation(conference):
     """
@@ -130,12 +50,85 @@ def parse_cvfoundation(conference):
         entry = {
             'title': title,
             'abstract_url': abstract_url,
-            'paper_url': paper_url
+            'paper_url': paper_url,
+            'authors': authors
         }
-        for rank, author in rank_authors(authors):
-            entry['author'] = author
-            entry['rank'] = rank
-            yield entry
+        yield entry
+        
+
+def parse_cvpapers(conference):
+    base_url = 'http://www.cvpapers.com/'
+    url = base_url + conference.lower() + ".html"
+    logging.info("Connecting to URL: %s" % url)
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+    dt_list = soup.find_all('dt')  # Title and paper url
+    dd_list = soup.find_all('dd')  # Author
+    assert len(dt_list) == len(dd_list)
+    logging.info("Found %d papers." % len(dt_list))
+    for dt, dd in zip(dt_list, dd_list):
+        authors = [x.strip() for x in dd.text.replace('\n', ' ').replace(' and ', ',').split(',') if x.strip()]
+        title = dt.text.rsplit('(')[0].replace('\n', ' ')
+        paper_url = dt.find('a', text='PDF')
+        if paper_url:
+            paper_url = paper_url['href']
+        entry = {
+            'title': title,
+            'paper_url': paper_url,
+            'authors': authors
+        }
+        yield entry
+
+
+def parse_jmlr(conference):
+    url_lookup = {
+        'icml2013': 'http://jmlr.csail.mit.edu/proceedings/papers/v28/',
+        'icml2014': 'http://jmlr.csail.mit.edu/proceedings/papers/v32/',
+        'icml2015': 'http://jmlr.csail.mit.edu/proceedings/papers/v37/',
+    }
+    url = url_lookup[conference]
+    logging.info("Connecting to URL: %s" % url)
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+    papers = soup.find_all('div', {'class': 'paper'})
+    logging.info("Found %d papers." % len(papers))
+    for paper in papers:
+        title = paper.find('', {'class': 'title'}).text
+        authors = [x.strip() for x in paper.find('', {'class': 'authors'}).string.split(',')]
+        abstract_url = paper.find('a', text='abs')
+        paper_url = paper.find('a', text='pdf')
+        if abstract_url:
+            abstract_url = abstract_url['href']
+        if paper_url:
+            paper_url = paper_url['href']
+        entry = {
+            'title': title,
+            'paper_url': paper_url,
+            'abstract_url': abstract_url,
+            'authors': authors
+        }
+        yield entry
+
+
+def parse_nips(conference):
+    year = int(conference[-4:])
+    no = year - 1987
+    base_url = 'https://papers.nips.cc'
+    url = base_url + '/book/advances-in-neural-information-processing-systems-%d-%d' % (no, year)
+    logging.info("Connecting to URL: %s" % url)
+    soup = BeautifulSoup(urllib2.urlopen(url), "html.parser")
+    papers = [x for x in soup.find_all('li') if x.find('', {'class': 'author'})]
+    logging.info("Found %d papers." % len(papers))
+    for paper in papers:
+        title = paper.find('a').text
+        abstract_url = base_url + paper.find('a')['href']
+        authors = [x.text for x in paper.find_all('a', {'class': 'author'})]
+        paper_url = abstract_url + ".pdf"
+        entry = {
+            'title': title,
+            'abstract_url': abstract_url,
+            'paper_url': paper_url,
+            'authors': authors
+        }
+        yield entry
 
 
 def parse(conference):
@@ -151,11 +144,14 @@ def parse(conference):
     else:
         raise ValueError("No parser available for conference: %s" % conference)
 
+
 if __name__ == "__main__":
+
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     parser = argparse.ArgumentParser(description='Scrape the web to extract machine learning papers and authors.')
     parser.add_argument('--output', type=str, default=None, help='Path to parsed list of authors')
     parser.add_argument('conference', type=valid_conference, help='Conference to target in [a-z]YYYY format. e.g. cvpr2016')
+
     args = parser.parse_args()
     if args.output is None:
         args.output = args.conference + '.csv'
@@ -164,5 +160,9 @@ if __name__ == "__main__":
         csv_writer = unicodecsv.DictWriter(fout, ["author", "rank", "title", "abstract_url", "paper_url"], encoding='utf-8')
         csv_writer.writeheader()
         for entry in parse(args.conference):
-            csv_writer.writerow(entry)
+            authors = entry.pop('authors')
+            for rank, author in rank_authors(authors):
+                entry['rank'] = rank
+                entry['author'] = author
+                csv_writer.writerow(entry)
     logging.info("Output written to: %s" % args.output)
